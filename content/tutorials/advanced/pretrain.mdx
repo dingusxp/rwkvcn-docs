@@ -1,18 +1,46 @@
 ---
 title: RWKV-LM 预训练教程
 description: 基于 RWKV-LM 的预训练方法
+keywords: [RWKV预训练教程, RWKV-LM预训练方法, RWKV预训练步骤, RWKV-LM预训练, RWKV-LM预训练模型]
+recommendedLinks:   
+  - title: RWKV 的架构变迁
+    link: /docs/RWKV-Wiki/RWKV-Architecture
+  - title: RWKV 的 benchmark 跑分
+    link: /docs/RWKV-Eval-Data/RWKV-Evals
+  - title: 如何调整 RWKV 的解码参数
+    link: /tutorials/basic/RWKV-Parameters
 ---
 import React from 'react';
 import { Accordion, Accordions } from 'fumadocs-ui/components/accordion';
 import { CallOut } from 'components-docs/call-out/call-out.tsx'
 
-预训练教程基于 [RWKV-LM](https://github.com/BlinkDL/RWKV-LM) 仓库，训练流程和 RWKV 官方模型完全一致。
+预训练教程基于 [RWKV-LM-V7](https://github.com/RWKV-Vibe/RWKV-LM-V7) 仓库，训练流程和 RWKV 官方模型完全一致。
 
-## 硬件需求
+## 预训练案例[#showcase]
+
+- [RWKV-7-Arithmetic-0.1B](https://huggingface.co/shoumenchougou/RWKV-7-Arithmetic-0.1B)：基于 RWKV-7 架构预训练的 0.1B 模型，实现基础加减法运算和加减法方程求解功能。
+
+## 视频教程
+
+<div className="iframe-container">
+ <iframe 
+ src="https://player.bilibili.com/player.html?isOutside=true&aid=115535358461762&bvid=BV1bNCjBKEb7&cid=33939328019&high_quality=1&autoplay=0"
+ scrolling="no"
+ frameBorder="0"
+ allowFullScreen={true}
+ sandbox="allow-top-navigation allow-same-origin allow-forms allow-scripts"
+>
+</iframe>
+</div>
+<CallOut type="info">
+高画质视频请[跳转到 B 站](https://www.bilibili.com/video/BV1bNCjBKEb7?t=0.0)观看。
+</CallOut>
+
+## 硬件需求[#hardware-requirements]
 
 预训练需要的显存**比微调训练要高得多**。
 
-以下是 `M_BSZ="1"`，`CTX_LEN="4096"`，预训练不同参数的 RWKV 模型所需的显存：
+以下是 `micro_bsz="1"`，`CTX_LEN="4096"`，预训练不同参数的 RWKV 模型所需的显存：
 
 | 模型参数 | 层数 | 维度 | 显存需求                                     |
 | -------- | ---- | ---- | -------------------------------------------- |
@@ -23,33 +51,65 @@ import { CallOut } from 'components-docs/call-out/call-out.tsx'
 | 7B       | 32   | 4096 | 4*4090 OOM                                   |
 | 14B      | 61   | 4096 | 4*4090 OOM                                   |
 
-## 克隆仓库
+## 克隆仓库[#clone-repo]
 
 ```bash
-git clone https://github.com/BlinkDL/RWKV-LM.git
+git clone https://github.com/RWKV-Vibe/RWKV-LM-V7.git
+# 或者国内镜像仓库
+git clone https://gitee.com/rwkv-vibe/RWKV-LM-V7.git
 ```
-无法克隆？复制并运行以下命令，下载 RWKV-LM 仓库压缩包并解压：
+无法克隆？复制并依次运行以下命令，下载 RWKV-LM-V7 仓库压缩包并解压：
 
 ```bash
-wget -O rwkv.zip https://github.com/BlinkDL/RWKV-LM/archive/refs/heads/main.zip && \
+wget -O rwkv.zip https://github.com/RWKV-Vibe/RWKV-LM-V7/archive/refs/heads/main.zip && \
 unzip -q rwkv.zip && \
-mv RWKV-LM-main RWKV-LM && \
 rm rwkv.zip
 ```
 <CallOut type="warning">
 使用 zip 下载的代码仓库不含 git 信息，无法使用 `git pull` 更新仓库
 </CallOut>
 
-## 准备训练环境
+## 准备训练环境[#prepare-env]
 
-请参考 [RWKV 微调环境配置](./Fine-Tune/FT-Environment.mdx) 配置 Conda 环境，并在新的 Conda 环境中安装以下软件：
- 
-``` bash copy
-# 通过指定 url 安装 CUDA 12.1 版本的 torch，也可以选择最新版本的 torch + CUDA 版本
-pip install torch --upgrade --extra-index-url https://download.pytorch.org/whl/cu121
-# 指定安装 1.9.5 版本的 PyTorch Lightning 和其他常用的机器学习工具包
-# --upgrade 参数意味着如果环境中已经安装了对应的软件包，则将其升级到最新版本
-pip install pytorch-lightning==1.9.5 deepspeed wandb ninja --upgrade
+1. 安装 CUDA Toolkit
+
+请参考 [**CUDA Toolkit 安装文档**](https://developer.nvidia.com/cuda-downloads)，根据您的操作系统安装  CUDA Toolkit。
+
+以下是 Ubuntu 24.04  x86_64 的安装示例：
+```bash
+# 下载 CUDA 仓库的 GPG 密钥包 
+wget https://developer.download.nvidia.com/compute/cuda/repos/ubuntu2404/x86_64/cuda-keyring_1.1-1_all.deb
+# 安装 GPG 密钥包，使系统信任 NVIDIA 的软件仓库
+sudo dpkg -i cuda-keyring_1.1-1_all.deb
+# 更新 apt 软件包列表，更新 NVIDIA CUDA 软件源
+sudo apt-get update
+# 安装 CUDA Toolkit 13.0（包含 nvcc 编译器、开发库、工具链等）
+sudo apt-get -y install cuda-toolkit-13-0 
+```
+
+2. 使用 miniforge 等 conda 兼容包管理器，创建一个全新的虚拟环境
+
+以下是 MiniConda-Linux x86_64 的安装和环境创建示例：
+
+``` bash 
+# 下载最新的 MiniConda 安装包
+wget https://repo.anaconda.com/miniconda/Miniconda3-latest-Linux-x86_64.sh
+# 运行 MiniConda 安装包的安装脚本，安装期间一定要注意进展，及时输入 yes  ！
+sh Miniconda3-latest-Linux-x86_64.sh -u
+# 重启环境变量，激活 Conda 环境
+source ~/.bashrc
+# 创建名为 rwkv-lm-v7 的 conda 环境, 并指定 python 版本为 3.12
+conda create -n rwkv-lm-v7 python=3.12
+# 激活 rwkv 环境
+conda activate rwkv-lm-v7
+```
+
+3. 安装下列依赖，注意 `pytorch-lightning` 固定使用了 `1.9.5` 版本，此为本仓库特性，请不要升级此依赖包。
+
+```bash
+pip3 install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu128
+# 安装 CUDA 版本的 PyTorch，这里的 cu128 指的是 CUDA 12.8 版本，可以根据你自己的 CUDA 版本进行调整
+pip3 install -r requirements.txt
 ```
 <CallOut type="info">
 下载缓慢？尝试在命令后添加 `-i https://mirrors.aliyun.com/pypi/simple` 参数，使用阿里源加快下载速度。
@@ -60,20 +120,45 @@ pip install pytorch-lightning==1.9.5 deepspeed wandb ninja --upgrade
 ```bash
 python -c "import torch; print(torch.__version__, torch.cuda.is_available())"
 ```
-输出为 `2.5.1+cu121 True`，表示已安装 CUDA 12.1 版本的 pytorch 2.5.1， CUDA 12.1 工具包可用。
+输出为 `2.7.1+cu128 True`，表示已安装 CUDA 12.8 版本的 pytorch 2.7.1， CUDA 12.8 工具包可用。
 
-## 准备训练数据
+## 准备训练数据[#prepare-dataset]
 
-请参考[准备训练数据](./Fine-Tune/FT-Dataset.mdx) 文档，准备一个 `jsonl` 格式的预训练数据集，并将其放在 `RWKV-LM/RWKV-v5` 目录下。
+请参考[准备训练数据](./Fine-Tune/FT-Dataset.mdx) 文档，准备一个 `jsonl` 格式的预训练数据集，并将其放在 `RWKV-LM-V7/data` 目录下。
 
-在 `RWKV-LM/RWKV-v5` 目录中运行以下命令，将 `jsonl` 数据文件转成 `binidx` 格式：
+<Accordions type="single">
+  <Accordion title="已经有转换好的 binidx 数据，如何查看 my_exit_tokens 和 magic_prime？">
+`data/compute_magic_prime.py` 脚本可为指定的 binidx 数据集和上下文长度（ctx_len）计算正确的 `--my_exit_tokens` 和 `--magic_prime` 值。
+
+1. 在 `data/compute_magic_prime.py` 中修改你的训练数据集路径和上下文长度（`DATA_NAME` 和 `CTX_LEN`）
+
+2. 打开终端， 在 `data` 目录下使用下列命令运行脚本
+```
+python compute_magic_prime.py
+```
+
+最终输出类似于：
+
+```bash
+### Loading /home/rwkv/RWKV-LM-V7/data/demo
+
+### /home/rwkv/RWKV-LM-V7/data/demo.bin/idx has 200499 tokens, 546 items. Dtype <class 'numpy.uint16'>
+
+### magic_prime = 47 (for ctxlen 4096)
+
+--my_exit_tokens 200499 --magic_prime 47 --ctx_len 4096
+```
+  </Accordion>
+</Accordions>
+
+在 `RWKV-LM-V7/data` 目录中运行以下命令，将 `jsonl` 数据文件转成 `binidx` 格式：
 
 ``` bash 
-python make_data.py demo.jsonl 3 4096
+python make_data.py demo.jsonl 30 4096
 ```
-命令中的 `3` 表示复制次数，`4096` 表示上下文长度。`make_data.py` 将执行以下操作：
+命令中的 `30` 表示复制次数，`4096` 表示上下文长度。`make_data.py` 将执行以下操作：
 
-- 对 `demo.jsonl` 进行 3 次复制和打乱
+- 对 `demo.jsonl` 进行 30 次复制和打乱
 - 加载复制后的 `demo.jsonl` 并基于 `rwkv_vocab_v20230424` 词表进行分词
 - 把数据保存为 `binidx` 格式文件：`demo.bin` 和 `demo.idx`
 - 针对 4096 上下文长度，计算出预训练所需的 `my_exit_tokens` 和 `magic_prime` 参数
@@ -81,7 +166,7 @@ python make_data.py demo.jsonl 3 4096
 ![make-data-py](./imgs/pretrain/make-data-py.png)
 
 <CallOut type="warning">
-务必保存命令行输出的 `--my_exit_tokens` 和 `--magic_prime` 参数，**这些参数会在后续的预训练步骤中频繁使用**。
+务必保存命令行输出的 `--my_exit_tokens`、`--magic_prime` 和 `--ctx_len` 参数，**这些参数会在后续的预训练步骤中频繁使用**。
 </CallOut>
 
 <CallOut type="info">
@@ -90,43 +175,43 @@ python make_data.py demo.jsonl 3 4096
 ![pretrain-showcase-dataset](./imgs/pretrain/pretrain-showcase-dataset.png)
 </CallOut>
 
-## 初始化 RWKV 模型
+## 初始化 RWKV 模型[#init-model]
 
 <CallOut type="info">
 在开始预训练之前，我们需要初始化一个 RWKV 模型，作为预训练的起点。
 </CallOut>
 
-使用文本编辑器打开 `RWKV-LM/RWKV-v7/train_temp` 目录的 `demo-training-prepare.sh` 脚本，修改以下初始化参数：
+使用文本编辑器打开 `RWKV-LM-V7` 目录的 `demo-training-prepare.sh` 脚本，修改以下初始化参数：
 
 | 参数                               | 参数解释                                                                                                       |
 | ---------------------------------- | -------------------------------------------------------------------------------------------------------------- |
 | `MODEL_TYPE="x070"`                | 训练的**模型版本**，建议使用 RWKV-7 架构，训练 RWKV-6 则填 x060                                                    |
-| `N_LAYER="12"` `N_EMBD="768"` | **模型层数和维度**，维度和层数决定预训练模型的参数大小，建议参考[硬件需求](#硬件需求)修改，N_EMBD 必须 64 的倍数 |
-| `CTX_LEN="4096"`                   | 预训练的**上下文长度**，必须是 512 的倍数。为了更好地支持多轮对话，建议使用 4096                                   |
+| `N_LAYER="12"` `N_EMBD="768"`      | **模型层数和维度**，维度和层数决定预训练模型的参数大小，建议参考[硬件需求](#硬件需求)修改，N_EMBD 必须 64 的倍数 |
+| `CTX_LEN="4096"`                   | 预训练的**上下文长度**，必须是 512 的倍数。必须和上面准备训练数据时输出的 `--ctx_len` 参数相同                                 |
 | `data_file`                        | 预训练的**数据路径**，使用已转换的 bin 和 idx 数据，无需文件名后缀                                                 |
-| `--my_exit_tokens`                 | 训练数据集的**总 token 数**，会在全部 token 训练完毕后退出，在 make_data.py 中计算得到                                    |
-| `--magic_prime`                    | 训练数据集的**magic_prime 值**，在 make_data.py 中计算得到                                                        |
+| `--my_exit_tokens`                 | 训练数据集的**总 token 数**，会在全部 token 训练完毕后退出，在 `make_data.py` 中计算得到                                    |
+| `--magic_prime`                    | 训练数据集的**magic_prime 值**，在 `make_data.py` 中计算得到                                                        |
 
-其余参数请**保持默认值**，修改完毕保存 `demo-training-prepare.sh` 文件，并在终端运行 `sh demo-training-prepare.sh` 命令初始化 RWKV 模型。
+其余参数请**保持默认值**，修改完毕保存 `demo-training-prepare.sh` 文件，然后在 `RWKV-LM-V7` 目录打开终端，并在终端运行 `sh demo-training-prepare.sh` 命令初始化 RWKV 模型。
 
 ![demo-training-prepare.sh](./imgs/pretrain/demo-training-prepare.png)
 
-## 预训练阶段
+## 预训练阶段[#pretrain]
 
-### 调整训练参数
+### 调整训练参数[#adjust-params]
 
-初始化完成后，使用文本编辑器打开 `RWKV-LM/RWKV-v7/train_temp` 目录的 `demo-training-run.sh` 脚本，修改训练参数。
+初始化完成后，使用文本编辑器打开 `RWKV-LM-V7` 目录的 `demo-training-run.sh` 脚本，修改训练参数。
 
 **这些训练参数必须和初始化阶段保持一致：**
 
 | 参数                               | 参数解释                                                                                                       |
 | ---------------------------------- | -------------------------------------------------------------------------------------------------------------- |
 | `MODEL_TYPE="x070"`                | 训练的**模型版本**，建议使用 RWKV-7 架构，训练 RWKV-6 则填 x060                                                    |
-| `N_LAYER="12"` `N_EMBD="768"` | **模型层数和维度**，维度和层数决定预训练模型的参数大小，建议参考[硬件需求](#硬件需求)修改，N_EMBD 必须 64 的倍数 |
-| `CTX_LEN="4096"`                   | 预训练的**上下文长度**，必须是 512 的倍数。为了更好地支持多轮对话，建议使用 4096                                   |
+| `N_LAYER="12"` `N_EMBD="768"`      | **模型层数和维度**，维度和层数决定预训练模型的参数大小，建议参考[硬件需求](#硬件需求)修改，N_EMBD 必须 64 的倍数 |
+| `CTX_LEN="4096"`                   | 预训练的**上下文长度**，必须是 512 的倍数。                                  |
 | `data_file`                        | 预训练的**数据路径**，使用已转换的 bin 和 idx 数据，无需文件名后缀                                                 |
-| `--my_exit_tokens`                 | 训练数据集的**总 token 数**，会在全部 token 训练完毕后退出，在 make_data.py 中计算得到                                    |
-| `--magic_prime`                    | 训练数据集的**magic_prime 值**，在 make_data.py 中计算得到                                                        |
+| `--my_exit_tokens`                 | 训练数据集的**总 token 数**，会在全部 token 训练完毕后退出，在 `make_data.py` 中计算得到                                    |
+| `--magic_prime`                    | 训练数据集的**magic_prime 值**，在 `make_data.py` 中计算得到                                                        |
 
 **其他训练参数的解释和参考值如下：**
 <CallOut type="warning">
@@ -164,48 +249,80 @@ python make_data.py demo.jsonl 3 4096
 | `--enable_progress_bar True`   | 是否在终端显示进度条，通常保持默认值 `True`                                                                                                                                    |
 
 
-### 开始预训练
+### 开始预训练[#start-pretrain]
 
-训练参数调整完毕后，保存 `demo-training-run.sh` 文件，并在 `RWKV-LM/RWKV-v7/train_temp` 目录下运行 `sh demo-training-run.sh` 命令开启预训练。
+训练参数调整完毕后，保存 `demo-training-run.sh` 文件，并在 `RWKV-LM-V7` 目录下运行 `sh demo-training-run.sh` 命令开启预训练。
 
 如果你在训练参数中配置了 `--wandb "Test"`，开启训练后可访问终端中的 WandB 链接（`https://wandb.ai/xxx`），可视化查看当前训练的 loss 曲线等信息。
 
 ![pre-training-run](./imgs/pretrain/pretrain-run-train.png)
 
-## 测试预训练模型
+## 测试预训练模型[#test-pretrain-model]
 
-预训练完成后，在 `RWKV-LM/RWKV-v7/train_temp/out` 目录中可以找到训练的中间检查点 `rwkv-0/1/2/...pth` 和最终模型文件 `rwkv-final.pth`。
+预训练完成后，在 `RWKV-LM-V7/out` 目录中可以找到训练的中间检查点 `rwkv-0/1/2/...pth` 和最终模型文件 `rwkv-final.pth`。
 
 ![pretrain-get-model](./imgs/pretrain/pretrain-get-model.png)
 
-可以使用 [RWKV Runner](../intermediate/RWKV-Runner/Introduction.md) 或者 [RWKV pip - API_DEMO_CHAT.py](../intermediate/RWKVpip.mdx) 脚本测试预训练模型。除了最终模型文件 `rwkv-final.pth`，还可以测试最后几个模型检查点。
+可以使用 [RWKV Runner](../intermediate/RWKV-Runner/Introduction.md) 或者 [RWKV pip - API_DEMO_CHAT.py](../intermediate/RWKVpip.mdx) 脚本测试预训练模型。除了最终模型文件 `rwkv-final.pth`，也可以测试最后几个模型检查点。
 
 ![test-pretrain-model](./imgs/pretrain/pretrain-test-result.png)
 
+## 基于官方 RWKV 模型继续预训练
 
+初始化 RWKV 模型时会获得一个 `rwkv-init.pth` 初始化检查点。运行 `sh demo-training-run.sh` 命令时，训练程序会从这个初始化检查点开始训练。
 
-## 附录
+利用这个原理，我们可以将 **RWKV 官方模型**改成 `rwkv-init.pth`，替换初始化目录中的检查点，以实现从 RWKV 官方模型继续预训练。
 
-### DeepSpeed 训练策略
+<CallOut type="tips">
+从 RWKV 官方模型继续训练时，需要确保 `demo-training-run.sh` 脚本中的训练参数 `N_LAYER` / `N_EMBD` 和 RWKV 模型的层数、维度完全对齐。
+</CallOut>
+ 
+| RWKV 模型参数 | 层数 `N_LAYER` | 维度 `N_EMBD` | 
+| -------- | ---- | ---- |
+| 0.1B     | 12   | 768  |
+| 0.4B     | 24   | 1024 | 
+| 1.5/1.6B     | 24   | 2048 | 
+| 2.9/3B       | 32   | 2560 | 
+| 7/7.2B       | 32   | 4096 | 
+| 13.3/14B      | 61   | 4096 |
+
+<CallOut type="warning">
+继续预训练 RWKV7-G1 模型时，请手动对齐 `src/model.py` 文件 [Line 126](https://github.com/BlinkDL/RWKV-LM/blob/main/RWKV-v7/train_temp/src/model.py#L126) 处的 LORA 维度，确保 LORA 维度与 RWKV 模型参数完全对齐。
+</CallOut>
+
+| | params | 0.1B | 0.4B | 1.5B | 2.9B | 7.2B | 13.3B |
+| :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- |
+| **D_DECAY_LORA** | w | 64 | 64 | 96 | 96 | 128 | 192 |
+| **D_AAA_LORA** | a | 64 | 64 | 96 | 96 | 128 | 192 |
+| **D_MV_LORA** | v | 32 | 32 | 64 | 64 | 96 | 128 |
+| **D_GATE_LORA** | g | 128 | 128 | 256 | 320 | 480 | 384 |
+
+## 附录[#appendix]
+
+### DeepSpeed 训练策略[#deepspeed]
 
 DeepSpeed 支持以下五种[训练策略](https://www.deepspeed.ai/tutorials/zero/#zero-overview)：
 
-| 策略名称                    | 显存占用 | CPU 占用 | 训练速度 | 适用显卡场景              | 特点说明                    |
-| --------------------------- | -------- | -------- | -------- | ------------------------- | --------------------------- |
-| `deepspeed_stage_1`         | 高       | 低       | 快       | 显存充足的高端显卡        | 基础版本，显存占用最高      |
-| `deepspeed_stage_2`         | 中       | 低       | 快       | 消费级高端显卡（如 3090） | 显存和速度的最佳平衡        |
-| `deepspeed_stage_2_offload` | 低       | 中       | 中等     | 显存中等，CPU 不差的机器  | 减少显存占用但速度稍慢      |
-| `deepspeed_stage_3`         | 低       | 中       | 中等     | 显存较小，需要切分大模型  | 支持超大模型，配置复杂      |
-| `deepspeed_stage_3_offload` | 最低     | 高       | 慢       | 显存小 + CPU 性能好       | 最省显存，但要求 CPU 性能高 |
+| 策略名称 | 显存占用 | CPU 占用 | 训练速度 | 适用场景 | 特点说明 |
+|---|:---:|:---:|:---:|---|---|
+| stage_1 | 较高 | 低 | 最快 | 显存较为充足的训练集群 | 仅分片优化器状态，稳定高效，吞吐最佳 |
+| stage_2 | 中等 | 低 | 较快 | 消费级/科研机，显存不算充裕 | 分片优化器 + 梯度，显存更省，吞吐略受影响 |
+| stage_2_offload | 较低 | 中 | 中等 | 显存有限但 CPU 较强 | 将优化器状态 offload 到 CPU/NVMe，显存大幅下降，但通信变多 |
+| stage_3 | 很低 | 中 | 中等～偏慢 | 大模型（>7B）必需 | 分片参数本身，省显存，但通信复杂 |
+| stage_3_offload | 最低 | 高 | 最慢 | 极小显存 + 强 CPU/NVMe | 显存最低，但训练速度依赖带宽，显著变慢 |
 
-**`deepspeed_stage_2` 是综合考虑了节约显存、保留训练性能、轻松部署的最佳折中点。**
+对于**多 GPU、大 Batch、全参数更新**的全参微调/预训练场景，**`deepspeed_stage_2` 是综合考虑了节约显存、保留训练性能、轻松部署的最佳折中点。**
+
+<CallOut type="tips">
+在 LoRA 等参数高效微调场景中，推荐 `deepspeed_stage_1` 。
+</CallOut>
 
 参考文档：
 - [DeepSpeed Zero Redundancy Optimizer](https://www.deepspeed.ai/tutorials/zero/#zero-overview)
 - [DeepSpeed ZeRO-Offload](https://www.deepspeed.ai/tutorials/zero-offload/)
 - [DeepSpeed ZeRO-3 Offload](https://www.deepspeed.ai/2021/03/07/zero3-offload.html)
 
-### 使用 WandB 监控训练过程
+### 使用 WandB 监控训练过程[#wandb]
 <CallOut type="info">
 WandB 是一个用于实验跟踪和模型评估的工具，可以帮助我们更好地监控训练过程和 loss 数据。
 </CallOut>
@@ -220,7 +337,7 @@ WandB 是一个用于实验跟踪和模型评估的工具，可以帮助我们�
 
 ![wandb-screenshot](./imgs/pretrain/wandb-screenshot.png)
 
-### 常见问题
+### 常见问题[#faq]
 
 <Accordions type="single">
   <Accordion title="训练中断了，如何继续训练？">

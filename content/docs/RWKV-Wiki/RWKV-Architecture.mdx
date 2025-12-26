@@ -1,9 +1,12 @@
 ---
 title: RWKV 架构及历史
+description: RWKV架构相关的知识，包括RWKV架构名称的由来、RWKV架构特性、架构历史、以及每个架构的模型发布等内容。
+keywords: [RWKV历史, RWKV架构名称, RWKV架构特性, RWKV架构历史, RWKV架构模型发布]
 ---
 
 import { Step, Steps } from 'fumadocs-ui/components/steps'
 import { CallOut } from 'components-docs/call-out/call-out.tsx'
+import { TabsCN, TabsContentCN, TabsListCN, TabsTriggerCN } from "components-docs/tabs/tabs.tsx"
 
 以下是 RWKV 架构相关的知识，包括 RWKV 架构名称的由来、RWKV 架构特性、架构历史、以及每个架构的模型发布等内容。
 
@@ -34,7 +37,28 @@ RWKV 架构的名称来源于时间混合和通道混合块中使用的四个主
 
 ## RWKV 架构的发展历程[#history]
 
-2020 年，BlinkDL 开始研究 Transformer ，立刻发现其有两个明显的改进方向：引入显式 decay 和 Token-shift（或者说短卷积）。在 **https://github.com/BlinkDL/minGPT-tuned** 上测试后，发现这些技巧对于 Transformer 的性能有显著提升。
+2020 年，BlinkDL 开始研究 Transformer ，立刻发现其有[两个明显的改进方向](https://zhuanlan.zhihu.com/p/191393788)：引入显式 decay 和 Token-shift（或者说短卷积）。在 **https://github.com/BlinkDL/minGPT-tuned** 上测试后，发现这些技巧对于 Transformer 的性能有显著提升。
+
+
+  **显式 decay**
+ ``` python
+    self.time_weighting = nn.Parameter(torch.ones(self.n_head, config.window_len, config.window_len))
+    ...
+    att = F.softmax(att, dim=-1) # 这是原始代码
+    att = att * self.time_weighting[:,:T,:T] # 只需增加这句
+    att = self.attn_drop(att) # 这是原始代码
+ ```
+
+ **Token-shift**
+ ``` python
+   self.time_shift = nn.ZeroPad2d((0,0,1,0))
+   ...
+   x = torch.cat([self.time_shift(x)[:,:T,:C//2], x[:,:T,C//2:]], dim=2) # 只需增加这句
+   q = self.query(x).view(B, T, self.n_head, C // self.n_head).transpose(1, 2) # 这是原始代码
+   k = self.key(x).view(B, T, self.n_head, C // self.n_head).transpose(1, 2) # 这是原始代码
+   v = self.value(x).view(B, T, self.n_head, C // self.n_head).transpose(1, 2) # 这是原始代码
+ ```
+
 
 随后，他注意到 Apple 的 [**Attention Free Transformer**](https://arxiv.org/abs/2105.14103) （AFT）论文并对其进行测试，发现这两种技巧也为 AFT 带来了显著的性能提升。
 
@@ -77,7 +101,7 @@ RWKV-V2 版本首次为 RWKV 实现了 RNN 模式，伪代码图如下：
 - $W$ 使用预计算的值进行初始化，与 Alibi（Attention with Linear Biases）有类似之处，但都是可训练的非固定值，且在每个通道都可以不同，表达能力显著提高。
 - **发明了一种 headQK 机制**，让模型可以直接从前文复制或避免生成某些字，这对于 ICL（in context learning） 很重要。几年后，其它研究者也发现了这一现象。但为了测试纯 RNN 的能力极限，RWKV 主线模型并未加入这一功能。
 
-```python
+``` python
 q = self.head_q(x)[:,:T,:] 
 k = self.head_k(x)[:,:T,:] 
 c = (q @ k.transpose(-2, -1)) * (1.0 / 256)
@@ -93,14 +117,18 @@ x = self.head(x) + c
 RWKV-V2 的自注意力层简化表达：
 
 $$
-x_{t+1} = \sigma(Rx_t) \cdot \frac{ \exp(Kx_t) \cdot (V_xt) + \exp(W) \cdot a_t }{ \exp(Kx_t) + \exp(W) \cdot b_t }
+\begin{align*}
+a_{t + 1} &= \exp(W) \odot a_t + \exp(Kz_t) \odot (Vz_t) \qquad b_{t+1} = \exp(W) \odot b_t + \exp(Kz_t)  
+\\ \\
+y_t &= \sigma(Rz_t) \odot \frac{a_t + \exp(Kz_t + X) \odot Vz_t}{ b_t + \exp(Kz_t + X) }
+\end{align*}
 $$
 
 ### RWKV-V3
 
 RWKV-V3 是一个短期的过渡版本，其相对 RWKV-V2 使用更全面的 token-shift（对 SA 和 FF 层中的 R / K / V 分别使用不同的可训练 TimeMix 因子） :
 
-```
+``` python
 xx = self.time_shift(x)
 xk = x * self.time_mix_k + xx * (1 - self.time_mix_k)
 xv = x * self.time_mix_v + xx * (1 - self.time_mix_v)
@@ -108,31 +136,28 @@ xr = x * self.time_mix_r + xx * (1 - self.time_mix_r)
 ```
 RWKV-V3 对比 V2 的 token-shift 改进图示：
 
-```mermaid
----
-title: RWKV-V2
----
-graph TD;
-    Xt["X<sub>t</sub>"] --> Zt["Z<sub>t</sub>"];
-    
-    Zt --> R;
-    Zt --> K;  
-    Zt --> V;
+``` mermaid
+graph LR;
+    subgraph RWKV-V2
+        direction TB
+        A_Xt["X<sub>t</sub>"] --> A_Zt["Z<sub>t</sub>"];
+        A_Zt --> A_R["R"];
+        A_Zt --> A_K["K"];
+        A_Zt --> A_V["V"];
+    end
 
-```
+    subgraph RWKV-V3
+        direction TB
+        B_Xt["X<sub>t</sub>"] --> B_Xr["X<sub>R</sub>"];
+        B_Xt --> B_Xk["X<sub>K</sub>"];
+        B_Xt --> B_Xv["X<sub>V</sub>"];
+        B_Xr --> B_R["R"];
+        B_Xk --> B_K["K"];
+        B_Xv --> B_V["V"];
+    end
 
-```mermaid
----
-title: RWKV-V3
----
-graph TD;
-    Xt["X<sub>t</sub>"] --> Xr["X<sub>R</sub>"];
-    Xt --> Xk["X<sub>K</sub>"];
-    Xt --> Xv["X<sub>V</sub>"];
- 
-    Xr --> R;
-    Xk --> K;
-    Xv --> V;
+    %% 定义子图之间的连接
+    RWKV-V2 -- "演进" --> RWKV-V3;
 ```
 
 此外，这个版本使用 preLN 代替 postLN（更稳定，且收敛更快）：
@@ -546,21 +571,109 @@ def ref_fwd(r, w, k, v, a, b):
 
 #### RWKV-V7 的模型发布[#rwkv-v7-model-release]
 
-RWKV-V7 发布了 Pile 和 World 数据集的预训练模型。**[RWKV-7-Pile](https://hf-mirror.com/BlinkDL/rwkv-7-pile)** 属于实验模型，基于 [EleutherAI/pile](https://huggingface.co/datasets/EleutherAI/pile) 数据集预训练而来。
+RWKV-V7 发布了 Pile、World 和 G1 三个系列的预训练模型。
 
-RWKV-7-World 模型基于 World V3 数据集预训练而来，有 0.1B/0.4B/1.5B/2.9B 四种参数版本。
+- **[RWKV-7-Pile](https://hf-mirror.com/BlinkDL/rwkv-7-pile)** 属于实验模型，基于 [EleutherAI/pile](https://huggingface.co/datasets/EleutherAI/pile) 数据集预训练
+- RWKV-7 "Goose" World 模型是支持全球语言的预训练模型，基于 World V3 数据集和其采样子集预训练
+- RWKV7-G1（"GooseOne"）系列属于推理模型，基于 World v3.5 数据集继续训练 RWKV-7 "Goose" World 系列模型
+
+<TabsCN defaultValue="g1" className="">
+  <TabsListCN>
+    <TabsTriggerCN value="g1">RWKV7-G1 模型</TabsTriggerCN>
+    <TabsTriggerCN value="world">RWKV-7-World 模型</TabsTriggerCN>
+    <TabsTriggerCN value="pile">RWKV-7-Pile 模型</TabsTriggerCN>
+  </TabsListCN>
+  <TabsContentCN value="g1" >
+RWKV7-G1 系列模型基于最新的 World v3.5 数据集训练而来，拥有较强的推理、代码和数学能力。
+
+| 模型名称         | 模型描述          | 
+| ----------------- | -------- | 
+| rwkv7-g1-0.1b     | 从 World v3.5 数据集中随机采样了 1T token 的数据训练            | 
+| rwkv7-g1-0.4b      | 从 World v3.5 数据集中随机采样了 2T token 的数据训练         |
+| rwkv7-g1-1.5b     | 从 World v3.5 数据集中随机采样了 5T token 的数据训练         |
+| rwkv7-g1-2.9b     | 从 World v3.5 数据集中随机采样了 10T token 的数据训练         |
+
+可以在 [RWKV7-G1 模型仓库](https://huggingface.co/BlinkDL/rwkv7-g1/tree/main) 查看所有 RWKV7-G1 系列模型。
+<CallOut type="info" >
+World v3.5 数据集是 World V3 数据集的扩充版本，包含更多小说、网页、数学、代码和 reasoning 数据，总数据为 5.16T tokens。
+</CallOut>
+  </TabsContentCN>
+  <TabsContentCN value="world" >
+RWKV-7-World 模型基于 World V3 数据集和其采样子集预训练而来，有 0.1B/0.4B/1.5B/2.9B 四种参数版本。
 
 | 模型类别          | 模型描述          | 
 | ----------------- | -------- | 
-| RWKV-7-World-v2.8      | 基于 World-v2.8 数据集的多语言预训练模型，只发布了 0.1B 参数版本            | 
-| RWKV-7-World-v2.9     | 基于 World-v2.9 数据集的多语言预训练模型，只发布了 0.4B 参数版本         |
-| RWKV-7-World-v3   | 基于 World V3 数据集的多语言预训练模型，有 1.5B 和 2.9B 两种参数    |
+| RWKV-7-World-0.1B-v2.8      | 基于 World-v2.8 数据集的多语言预训练模型，只发布了 0.1B 参数版本            | 
+| RWKV-7-World-0.4B-v2.9     | 基于 World-v2.9 数据集的多语言预训练模型，只发布了 0.4B 参数版本         |
+| RWKV-7-World-1.5B/2.9B-v3   | 基于完整 World V3 数据集的预训练模型，有 1.5B 和 2.9B 两种参数    |
+
+可以在 [RWKV-7-World 模型仓库](https://huggingface.co/BlinkDL/rwkv-7-world/tree/main) 查看所有 RWKV-7-World 系列模型。
 
 <CallOut type="info" >
 World-v2.8 数据集：：从 World v3 数据集中采样 1T tokens 作为训练数据
 
 World-v2.9 数据集：：从 World v3 数据集中采样 2T tokens 作为训练数据
 </CallOut>
+  </TabsContentCN>
+  <TabsContentCN value="pile" >
+RWKV-7-Pile 是基于 Pile 数据集进行实验的模型，因此存在各种不同的层数和维度设计：
+
+- RWKV-x070-Pile-1.47B
+- RWKV-x070-Pile-164M-L33-D512
+- RWKV-x070-Pile-165M-L25-D576
+- RWKV-x070-Pile-168M
+- RWKV-x070-Pile-421M
+
+可以在 [RWKV-7-Pile 模型仓库](https://huggingface.co/BlinkDL/rwkv-7-pile/tree/main) 查看所有 RWKV-7-Pile 系列模型。
+  </TabsContentCN>
+</TabsCN>
+
+### RWKV-V8
+
+RWKV-V8 的架构代号是 "Heron"（鹭）。
+RWKV-V8 首个特性 `DeepEmbed` 在 2025 年 5 月[公布](https://rwkv.cn/news/read?id=20250527)。`DeepEmbed` 可以实现类似 MoE 的优秀推理性能，同时无需占用显存，甚至无需占用内存，可以让稀疏的大模型真正部署到所有端侧设备。
+
+#### RWKV-V8 的 DeepEmbed
+
+DeepEmbed 在模型的每一层 FFN 中为词表中的每个 token 训练一个可学习的高维向量，这可以写成 Embed 层。这些向量在训练阶段可被学习，而在推理阶段可存储于 RAM/SSD 中，对于每个 token 只需预读极少量参数，从而显著减少显存占用。
+
+推理时，模型根据 token index 可提前预读本层的 embedding 向量，用于对 FFN 输出进行逐通道的乘性调制（channelwise scaling）。
+
+这些基于 token 的 embedding 向量构成了一个规模庞大但稀疏的知识库，能够显著提升模型存储和调用世界知识的能力。尽管这些向量看似增加了模型参数量，但**不需要占用显存**，且在训练过程中可通过 TP（Tensor Parallelism）避免 DP（Data Parallelism）中梯度同步的带宽开销，并可进一步 offload 至 RAM 或 SSD。
+
+在端侧推理场景下，这些向量同样可存储于内存中，或通过 `mmap` 等机制直接从硬盘按需加载。每个 token 仅引入几十 KB 的额外访存开销，使该机制非常适合在边缘设备上部署。
+
+**DeepEmbed 代码示例：**
+
+原始 ReLuSq FFN：
+
+``` python
+x = torch.relu(self.key(x)) ** 2  
+return self.value(x)
+```
+
+DeepEmbed_1x ReLuSq FFN：
+
+``` python
+self.deepemb = nn.Embedding(d_vocab, d_emb)
+...
+x = torch.relu(self.key(x)) ** 2
+return self.value(x) * self.deepemb(idx)
+```
+
+DeepEmbed_4x ReLuSq FFN（效果更佳，参数更多）： 
+
+``` python
+self.deepemb = nn.Embedding(d_vocab, d_emb * 4)
+...
+x = torch.relu(self.key(x)) ** 2
+return self.value(x * self.deepemb(idx))
+```
+
+<CallOut type="info" >
+由于查表操作在推理时不占用 VRAM，这些向量在参数量层面几乎是"免费的"。因此，还可以进一步引入 n-gram（如 `bigram`、`trigram`），提升模型对词组/片段的建模能力。如果词表规模较大，也可结合 LoRA 技术降低显存和训练开销。
+</CallOut>
+
 
 {/*
 ## RWKV 与经典 RNN 的区别
@@ -591,11 +704,9 @@ RWKV 架构由一系列堆叠的残差块组成，每个残差块由具有循环
 
 ## RWKV 架构参考资料[#reference-material]
 
-有关 RWKV 架构的核心概念，可以查看 [RWKV 150 行代码](https://github.com/BlinkDL/ChatRWKV/blob/main/RWKV_in_150_lines.py)。
-
-有关 RWKV-6 架构的代码解读，可以参考这篇博客：[介绍 RWKV-6 的模型设计，代码带注释](https://zhuanlan.zhihu.com/p/694593540) 。
-
-有关 RWKV-7 架构设计，可以参考博客：[RWKV-7：极先进的大模型架构，长文本能力极强](https://rwkv.cn/news/read?id=15) 。
+- 有关 RWKV 架构的核心概念，可以查看 [RWKV 150 行代码](https://github.com/BlinkDL/ChatRWKV/blob/main/RWKV_in_150_lines.py)。
+- 有关 RWKV-6 架构的代码解读，可以参考这篇博客：[介绍 RWKV-6 的模型设计，代码带注释](https://zhuanlan.zhihu.com/p/694593540) 。
+- 有关 RWKV-7 架构设计思路，可以参考博客：[RWKV-7：极先进的大模型架构，长文本能力极强](https://rwkv.cn/news/read?id=15) 。
 
 或者，你可以通过阅读 RWKV 论文学习：
 
@@ -603,9 +714,9 @@ RWKV 架构由一系列堆叠的残差块组成，每个残差块由具有循环
 - [RWKV 5 /6 架构论文 | arXiv（2404.05892）](https://arxiv.org/abs/2404.05892)
 - [RWKV-7 架构论文 | arXiv（2503.14456）](https://arxiv.org/abs/2503.14456)
 
-如果你对基础有了掌握，可以开始在[RWKV 主仓库](https://github.com/BlinkDL/RWKV-LM)中研究 RWKV 的训练和 CUDA 代码。
+如果你已经了解了 RWKV 的原理，则可以在[RWKV 主仓库](https://github.com/BlinkDL/RWKV-LM)中研究 RWKV 的训练和 CUDA 代码。
 
 RWKV 架构发展的综述论文：
 
 - [The Evolution of RWKV | arXiv（2411.02795）](https://arxiv.org/abs/2411.02795)
-- [A Survey of RWKV | arXiv（2412.14847）](https://arxiv.org/abs/2412.14841)
+- [A Survey of RWKV | arXiv（2412.14847）](https://arxiv.org/abs/2412.14847)

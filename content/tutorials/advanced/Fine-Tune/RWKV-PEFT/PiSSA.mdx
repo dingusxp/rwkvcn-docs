@@ -1,6 +1,7 @@
 ---
 title: PiSSA 微调教程
-
+description: PiSSA 微调是一种参数高效微调方法，通过选择性更新RWKV模型部分参数（例如 LoRA 或 Adapter 层）来保持模型性能，同时避免对整个模型进行全面更新，从而提升训练效率。
+keywords: [RWKV PiSSA 微调, PiSSA 微调教程, PiSSA 微调方法, PiSSA 微调框架, PiSSA 微调效果]
 ---
 
 
@@ -52,7 +53,7 @@ RWKV PiSSA 微调的显存（GPU VRAM）需求可参考下表：
 | RWKV7-0.1B | 2.6GB GPU | 2.4GB GPU  | 2.5GB GPU  |
 | RWKV7-0.4B | 3.4GB GPU  | 3GB GPU  | 2.7GB GPU  |
 | RWKV7-1.5B | 5.6GB GPU  | 4.6GB GPU  | 3.9GB GPU  |
-| RWKV7-3B | 8.8GB GPU  | 6.7GB GPU  | 5.7GB GPU  |
+| RWKV7-2.9B | 8.8GB GPU  | 6.7GB GPU  | 5.7GB GPU  |
 </Tab>
 <Tab>
 | 模型参数 | bf16  | int8 | nf4 |
@@ -93,7 +94,7 @@ git clone https://github.com/JL-er/RWKV-PEFT.git
 如果 GitHub 无法链接，请使用以下国内仓库：
 
 ```  bash copy
-git clone https://gitee.com/uniartisan2018/RWKV-PEFT.git
+git clone https://gitee.com/rwkv-vibe/RWKV-PEFT.git
 ```
 </CallOut>
 克隆完成后，使用 `cd RWKV-PEFT` 命令进入 RWKV-PEFT 目录。并运行以下命令，安装项目所需依赖：
@@ -237,7 +238,7 @@ python train.py --load_model $load_model \
 --peft pissa --pissa_config $pissa_config \
 # 以下是可选项
 # --op cuda/fla/triton （选择不同的算子，不加此参数则默认使用 cuda）
-# --wandb RWKV-PEFT-LoRA （是否使用 wandb 监控训练过程）
+# --wandb RWKV-PEFT-PiSSA （是否使用 wandb 监控训练过程）
 # --quant int8/nf4 （是否量化训练）
 # --lr_schedule wsd 是否启用余弦退火优化学习率，默认的 lr_schedule = cos_decay 
 ```
@@ -267,8 +268,8 @@ python train.py --load_model $load_model \
 | 参数 | 描述 |
 | ---| --- |
 | base_model | PiSSA 微调的基底 RWKV 模型路径，参考 run_pissa.sh 的 `load_model` 路径 |
-| pissa_checkpoint | 训练得到的 pissa 文件路径，通常存放在 run_pissa.sh 指定的 `proj_dir` 目录中 |
-| pissa_init | 填写 pissa 初始化权重文件路径（`init_pissa.pth`），通常和训练得到的 pissa 文件保存在同一目录 |
+| pissa_checkpoint | 训练得到的 PiSSA 文件路径，通常存放在 run_pissa.sh 指定的 `proj_dir` 目录中 |
+| pissa_init | 填写 PiSSA 初始化权重文件路径（`init_pissa.pth`），通常和训练得到的 PiSSA 文件保存在同一目录 |
 | output | 合并后的 PiSSA 模型输出路径（包含模型命名 `xxx.pth`） |
 | TYPE='pissa' | 合并类型：PiSSA，无需修改 |
 | --quant | 跟随训练时的量化参数，"nf4"或者"int8"。如果训练时未使用量化，则无需添加此参数 |
@@ -283,8 +284,8 @@ output='/home/rwkv/RWKV-PEFT/output_pissa/pissa-test-3b.pth'
 TYPE='pissa'
 
 python merge/merge.py --base_model $base_model \
---lora_init $lora_init \
---lora_checkpoint $lora_checkpoint \
+--lora_init $pissa_init \
+--lora_checkpoint $pissa_checkpoint \
 --output $output \
 --type $TYPE 
 # --quant int8/nf4 （和训练时的量化参数同步）

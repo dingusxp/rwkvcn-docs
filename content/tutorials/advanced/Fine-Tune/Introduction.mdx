@@ -1,5 +1,7 @@
 ---
 title: 微调简介
+description: 为什么要微调 RWKV 模型，以及需要为微调训练准备什么。
+keywords: [微调 RWKV 模型, RWKV微调, 微调 RWKV 模型需要什么, 微调 RWKV 环境, 微调 RWKV 模型需要什么显卡]
 ---
 
 import { Tab, Tabs } from 'fumadocs-ui/components/tabs'
@@ -19,11 +21,11 @@ import { CallOut } from 'components-docs/call-out/call-out.tsx'
 
 ## 我需要为微调训练准备什么？
 
-要微调 RWKV 模型，你需要准备**一个 Linux 系统**和基础的 Linux 知识储备、一张**性能较强的 NVIDIA 显卡**。
+要微调 RWKV 模型，你需要准备**一个 Linux 系统**、基础的 Linux 知识储备，和一张**性能较强的 NVIDIA 显卡**（例如 RTX 4090）。
 
-其次，你需要为 Linux 系统配置训练 RWKV 模型的**虚拟环境、软件包**。
+其次，你需要为 Linux 系统配置训练 RWKV 模型需要的工具，例如 [**NVIDIA CUDA Toolkit**](./FT-Environment#cudatoolkit)、[**conda 虚拟环境**](./FT-Environment#conda)、[**PyTorch 等软件包**](./FT-Environment#install-deps)。
 
-最后，你需要准备用于微调训练的**数据集**。
+最后，你需要准备用于微调训练的[**数据集**](./FT-Dataset)。
 
 ## 消费级显卡可以微调什么模型？[#vram-of-fine-tuning]
 
@@ -33,7 +35,7 @@ import { CallOut } from 'components-docs/call-out/call-out.tsx'
 
 ### RWKV-7 模型微调显存需求[#vram-of-rwkv-7-fine-tuning]
 
-<Tabs items={["State tuning", "LoRA 微调", "DiSHA 微调", "PiSSA 微调"]}>
+<Tabs items={["State tuning", "LoRA 微调", "MiSS 微调", "PiSSA 微调"]}>
 <Tab>
 **RWKV-7 模型进行 [State tuning](./RWKV-PEFT/State-Tuning.mdx) 的显存需求：**
 
@@ -42,37 +44,37 @@ import { CallOut } from 'components-docs/call-out/call-out.tsx'
 | RWKV7-0.1B | 2.6GB GPU   | 2.4GB GPU  | 2.5GB GPU  | 
 | RWKV7-0.4B | 3.1GB GPU  | 2.9GB GPU  | 2.8GB GPU  | 
 | RWKV7-1.5B | 5.3GB GPU  | 4.1GB GPU  | 3.7GB GPU  | 
-| RWKV7-3B   | 8.2GB GPU  | 5.7GB GPU  | 4.7GB GPU  | 
+| RWKV7-2.9B   | 8.2GB GPU  | 5.7GB GPU  | 4.7GB GPU  | 
 </Tab>
 <Tab>
-**RWKV-7 模型进行 [LoRA 微调](./RWKV-PEFT/LoRA-Fine-Tuning.mdx) 的显存需求：**
+**RWKV-7 模型进行 [LoRA 微调](./RWKV-PEFT/LoRA.mdx) 的显存需求：**
 
 | 模型参数 | bf16  | int8 量化 | nf4 量化 |
 |------------|---------|--------|--------|
 | RWKV7-0.1B | 2.7GB GPU   | 2.5GB GPU  | 2.4GB GPU  | 
 | RWKV7-0.4B | 3.4GB GPU  | 2.9GB GPU  | 2.7GB GPU  | 
 | RWKV7-1.5B | 5.6GB GPU  | 4.6GB GPU  | 3.9GB GPU  | 
-| RWKV7-3B   | 8.8GB GPU  | 6.7GB GPU  | 5.7GB GPU  | 
+| RWKV7-2.9B   | 8.8GB GPU  | 6.7GB GPU  | 5.7GB GPU  | 
 </Tab>
 <Tab>
-**RWKV-7 模型进行 [DiSHA 微调](./RWKV-PEFT/DiSHA-Fine-Tuning.mdx) 的显存需求：**
+**RWKV-7 模型进行 [MiSS 微调](./RWKV-PEFT/MiSS.mdx) 的显存需求：**
 
 | 模型参数 | bf16  | int8 量化 | nf4 量化 |
 |------------|---------|--------|--------|
 | RWKV7-0.1B | 2.7GB GPU   | 2.5GB GPU  | 2.4GB GPU  | 
 | RWKV7-0.4B | 3.1GB GPU  | 2.9GB GPU  | 2.7GB GPU  | 
 | RWKV7-1.5B | 5.6GB GPU  | 4.5GB GPU  | 3.9GB GPU  | 
-| RWKV7-3B   | 8.8GB GPU  | 6.7GB GPU  | 5.7GB GPU  | 
+| RWKV7-2.9B   | 8.8GB GPU  | 6.7GB GPU  | 5.7GB GPU  | 
 </Tab>
 <Tab>
-**RWKV-7 模型进行 [PiSSA 微调](./RWKV-PEFT/Pissa-Fine-Tuning.mdx) 的显存需求：**
+**RWKV-7 模型进行 [PiSSA 微调](./RWKV-PEFT/PiSSA.mdx) 的显存需求：**
 
 | 模型参数 | bf16  | int8 量化 | nf4 量化 |
 |------------|---------|--------|--------|
 | RWKV7-0.1B | 2.6GB GPU   | 2.5GB GPU  | 2.4GB GPU  | 
 | RWKV7-0.4B | 3.4GB GPU  | 3.0GB GPU  | 2.7GB GPU  | 
 | RWKV7-1.5B | 5.6GB GPU  | 4.6GB GPU  | 3.9GB GPU  | 
-| RWKV7-3B   | 8.8GB GPU  | 6.7GB GPU  | 5.7GB GPU  | 
+| RWKV7-2.9B   | 8.8GB GPU  | 6.7GB GPU  | 5.7GB GPU  | 
 </Tab>
 </Tabs>
 
@@ -80,7 +82,7 @@ import { CallOut } from 'components-docs/call-out/call-out.tsx'
 
 RWKV-6 模型微调的显存需求比 RWKV-7 略高，以下显存需求仅供参考：
 
-|   模型尺寸         | 全参微调 | DiSHA/LoRA/PISSA  | QLoRA/QPissa | State tuning |
+|   模型尺寸         | 全参微调 | MiSS/LoRA/PISSA  | QLoRA/QPissa | State tuning |
 | --------- | ---- | ---- | ---- | ---- |
 | RWKV6-1.6B | 爆显存 | 7.4GB GPU | 5.6GB GPU | 6.4GB GPU |
 | RWKV6-3B | 爆显存  | 12.1GB GPU | 8.2GB GPU | 9.4GB GPU |

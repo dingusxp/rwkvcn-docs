@@ -1,6 +1,7 @@
 ---
 title: RWKV-FLA 使用教程
-
+description: 详细介绍RWKV-FLA的安装指南、模型推理示例、使用RWKV组件、常见问题与解决方案等。
+keywords: [RWKV-FLA安装指南, RWKV-FLA模型推理示例, RWKV-FLA使用RWKV组件, RWKV-FLA常见问题与解决方案]
 ---
 import { Tab, Tabs } from 'fumadocs-ui/components/tabs'
 import { Step, Steps } from 'fumadocs-ui/components/steps'
@@ -23,22 +24,22 @@ RWKV-FLA 是一个专为 RWKV 模型系列提供的高性能推理和训练框�
 <Tabs items={['稳定版 Triton（推荐）', 'Triton nightly 版本']}>
 <Tab value='稳定版 Triton（推荐）'>
 
-对于消费级显卡（4090及以下），我们建议使用稳定版本的 Triton；
+对于消费级显卡（4090及以下），我们建议使用稳定版本的 Triton。
 
 依次运行以下命令安装 RWKV-FLA 及相关依赖：
 ```bash
-# 创建新环境（推荐）
+# 创建新环境（支持 Python 3.10 ~ 3.13）
 conda create -n rwkv-fla python=3.12
 # 进入刚刚创建的环境
 conda activate rwkv-fla
 # 安装相关依赖
-pip3 install torch torchvision torchaudio --upgrade
+pip3 install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu128
 # 安装最新版的 RWKV-FLA
 pip install --upgrade rwkv-fla
 ```
 
 <CallOut type='info'>
-此处推荐使用主流的 Linux 发行版，Windows 和 Mac 系统有诸多更复杂的配置，不推荐使用。
+推荐使用主流的 Linux 发行版，Windows 和 Mac 系统未经全面验证，不推荐使用。
 </CallOut>
 </Tab>
 <Tab value='Triton nightly 版本'>
@@ -71,40 +72,41 @@ pip install flash-attn --no-deps --no-cache-dir --no-build-isolation
 </Tabs>
 ## 模型推理示例
 
-使用 RWKV-FLA 进行模型推理非常简单，与 Hugging Face Transformers 库的使用方式类似;
+使用 RWKV-FLA 进行 RWKV 模型推理非常简单，与 Hugging Face Transformers 库的使用方式类似。
 
-下面我们给出一个测试代码，大家可以复制到任意 `.py` 文件，然后使用 `python` 命令运行：
+下面我们给出一个测试代码，可以复制代码到 `xx.py` 文件，然后使用 `python xx.py` 命令运行：
 
 ```python
 from transformers import AutoModelForCausalLM, AutoTokenizer
-
+import torch
 # 加载模型和分词器
-model = AutoModelForCausalLM.from_pretrained('fla-hub/rwkv7-0.4B-world', trust_remote_code=True)
-tokenizer = AutoTokenizer.from_pretrained('fla-hub/rwkv7-0.4B-world', trust_remote_code=True)
+model = AutoModelForCausalLM.from_pretrained('fla-hub/rwkv7-1.5B-g1',torch_dtype=torch.bfloat16, trust_remote_code=True)
+tokenizer = AutoTokenizer.from_pretrained('fla-hub/rwkv7-1.5B-g1', trust_remote_code=True)
 model = model.cuda()
-
-# 准备对话历史
-prompt = "你能干什么？\n\n"
+# 准备对话历史和提示词
+prompt = "什么是深度学习？\n\n"
 messages = [
     {"role": "user", "content": "你是谁？"},
-    {"role": "assistant", "content": "我是RWKV"},
+    {"role": "assistant", "content": "我是RWKV，一个基于RWKV架构的AI模型。"},
     {"role": "user", "content": prompt}
 ]
-
 # 应用对话模板
 text = tokenizer.apply_chat_template(
     messages,
     tokenize=False,
-    add_generation_prompt=True
+    add_generation_prompt=True,
+    enable_thinking=True  # 默认为 True，设为 False 则禁用思考
 )
-
-# 模型推理
+# 模型推理，可以通过调整 temperature 等解码参数来调整生成质量
 model_inputs = tokenizer([text], return_tensors="pt").to(model.device)
 generated_ids = model.generate(
     **model_inputs,
-    max_new_tokens=1024,
+    max_new_tokens=500,
+    do_sample=True,
+    temperature=1.0,
+    top_p=0.3,
+    repetition_penalty=1.3
 )
-
 # 处理输出
 generated_ids = [
     output_ids[len(input_ids):] for input_ids, output_ids in zip(model_inputs.input_ids, generated_ids)
@@ -114,11 +116,12 @@ print('\n')
 print(response)
 print('\n')
 ```
-如果正常安装，代码运行后会在终端中输出如下图所示的内容：
+成功运行后，终端会输出如下内容：
+
 ![fla-example-ch](./images/fla-example-ch.png)
 
 <CallOut type='info'>
-此处以 RWKV7-World-0.4B 为例，可选模型还有很多，详细请到 [https://huggingface.co/fla-hub](https://huggingface.co/fla-hub) 查看。
+此处以 RWKV7-1.5B-g1 为例，可选模型还有很多，详细请到 [https://huggingface.co/fla-hub](https://huggingface.co/fla-hub) 查看。
 </CallOut>
 
 ## 使用 RWKV 组件
